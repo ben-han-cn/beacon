@@ -11,8 +11,7 @@
 -export([start_link/0,
          add_node/2,
          remove_node/1,
-         send_cmd_to_node/2,
-         get_run_cmd_count/1,
+         get_node/1,
          get_nodes/0,
          get_offline_nodes/0]).
 
@@ -37,17 +36,14 @@ add_node(NodeName, IP) ->
 remove_node(NodeName) ->
     gen_server:call(?SERVER, {remove_node, NodeName}).
 
+get_node(NodeName) ->
+    gen_server:call(?SERVER, {get_node, NodeName}).
+
 get_nodes() ->
     gen_server:call(?SERVER, get_nodes).
 
 get_offline_nodes() ->
     gen_server:call(?SERVER, get_offline_nodes).
-
-get_run_cmd_count(Node) ->
-    gen_server:call(?SERVER, {get_run_cmd_count, Node}).
-
-send_cmd_to_node(Cmd, Node) ->
-    gen_server:cast(?SERVER, {send_cmd, Cmd, Node}).
 
 %% ------------------------------------------------------------------
 %% gen_server Function Definitions
@@ -61,33 +57,25 @@ init([]) ->
     {ok, #state{online_nodes=[], offline_nodes=[]}}.
 
 handle_call({add_node, Node, IP}, _From, #state{online_nodes = OnlineNodes} = State) ->
-    FullNode = node_full_name(Node, IP),
-    PID = beacon_echo:start(FullNode),
-    monitor_node(FullNode, true),
-    link(PID),
-    io:format("!!!!!!!! new pid is ~p ~n", [PID]),
-    {reply, ok, State#state{online_nodes = [{Node, FullNode, PID} | OnlineNodes]}};
+    NodeFullName= node_full_name(Node, IP),
+    case beacon_slave_agent:start(NodeFullName) of
+        {ok, PID} ->
+            {reply, ok, State#state{online_nodes = [{Node, PID} | OnlineNodes]}};
+        {error, Info} ->
+            io:format("node ~p add failed : ~p ~n", [Node, Info]),
+            {reply, failed, State}
+    end;
 
-handle_call({get_run_cmd_count, Node}, _From, #state{online_nodes = OnlineNodes} = State) ->
-    Count = case lists:keysearch(Node, 1, OnlineNodes) of
-                    {value, {Node, FullNode, _}} ->
-                        beacon_echo:get_run_cmd_count(FullNode);
-                    false ->
-                        0
-            end,
-    {reply, Count, State};
+handle_call({get_node, Node}, _From, #state{online_nodes = OnlineNodes} = State) ->
+    case lists:keysearch(Node, 1, OnlineNodes) of 
+        {value, {Node, AgentPID}} ->
+            {reply, AgentPID, State};
+        false ->
+            {reply, undefined, State}
+    end;
 
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
-
-handle_cast({send_cmd, Node, Cmd}, #state{online_nodes = OnlineNodes} = State) ->
-    case lists:keysearch(Node, 1, OnlineNodes) of
-        {value, {Node, FullNode, _}} ->
-            beacon_echo:run_cmd(FullNode, Cmd);
-        false ->
-            io:format("unknown node with name ~p ~n", [Node])
-    end,
-    {noreply, State}.
 
 handle_info({nodedown, FullNode}, #state{online_nodes = OnlineNodes, offline_nodes = OfflineNodes} = State) ->
     NewState = case lists:keytake(FullNode, 2, OnlineNodes) of
@@ -110,6 +98,9 @@ handle_info({'EXIT',Pid, Info}, #state{online_nodes = _OnlineNodes} = State) ->
     {noreply, State};
 
 handle_info(_Info, State) ->
+    {noreply, State}.
+
+handle_cast(_Info, State) ->
     {noreply, State}.
 
 terminate(_Reason, _State) ->

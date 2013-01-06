@@ -22,8 +22,8 @@
 %% API Function Definitions
 %% ------------------------------------------------------------------
 
-start(Node) ->
-    {ok, PID} = gen_server:start({Node, ?SERVER}, ?MODULE, [], []),
+start(Args) ->
+    {ok, PID} = gen_server:start({local, ?SERVER}, ?MODULE, Args, []),
     PID.
 
 get_run_cmd_count(Node) ->
@@ -40,7 +40,8 @@ crash(Node) ->
 %% gen_server Function Definitions
 %% ------------------------------------------------------------------
 
-init([]) ->
+init([Master]) ->
+    Master ! {service_started, self()},
     {ok, #state{run_cmd_count = 0}}.
 
 handle_call(get_run_cmd_count, _From, #state{run_cmd_count = Count} = State) ->
