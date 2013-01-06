@@ -62,9 +62,6 @@ init([]) ->
 
 handle_call({add_node, Node, IP}, _From, #state{online_nodes = OnlineNodes} = State) ->
     FullNode = node_full_name(Node, IP),
-    case net_adm:ping(FullNode) of
-        pong ->
-
     PID = beacon_echo:start(FullNode),
     monitor_node(FullNode, true),
     link(PID),
