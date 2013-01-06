@@ -10,6 +10,7 @@
 -export([start/1,
          start_service/3,
          stop_service/2,
+         run_cmd/4,
          get_running_services/1,
          stop/1]).
 
@@ -32,6 +33,9 @@ start_service(Agent, Service, Args) ->
 
 stop_service(Agent, Service) ->
     gen_server:call(Agent, {stop_service, Service}).
+
+run_cmd(Agent, Service, Cmd, Args) ->
+    gen_server:call(Agent, {run_cmd, Service, Cmd, Args}).
 
 get_running_services(Agent) ->
     gen_server:call(Agent, get_running_services).
@@ -73,8 +77,17 @@ handle_call({start_service, Service, Args}, _From, #state{slave_pid = SlavePID, 
         _ ->
             io:format("slave node isn't running")
     end,
-    {reply, ok, State}.
+    {reply, ok, State};
 
+handle_call({run_cmd, Service, Cmd, Args}, _From, #state{slave_pid = SlavePID, slave_state = SlaveStatus} = State) ->
+    Result = case SlaveStatus of
+                running ->
+                    beacon_slave:run_cmd(SlavePID, Service, Cmd, Args);
+                _ ->
+                    io:format("slave node isn't running"),
+                    'cmd is buffered'
+            end,
+    {reply, Result, State}.
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -83,7 +96,7 @@ handle_cast(_Msg, State) ->
 handle_info({'DOWN', _Reference, process, Pid, _Reason}, #state{slave_pid = SlavePID} = State) ->
     if 
         Pid =:= SlavePID -> 
-            io:fomrat("remote slave process down ~n"),
+            io:format("remote slave process down ~n"),
             {noreply, State#state{slave_state = "offline"}};
         true ->
             io:format("unknow pid down ~n"),

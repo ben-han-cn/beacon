@@ -10,8 +10,8 @@
 -export([start/1,
          start_service/3,
          stop_service/2,
-         run_command/4,
-         async_run_command/4,
+         run_cmd/4,
+         async_run_cmd/4,
          get_running_services/1,
          stop/1]).
 
@@ -38,10 +38,10 @@ stop_service(Slave, Service) ->
 get_running_services(Slave) ->
     gen_server:call(Slave, get_running_services).
 
-run_command(Slave, Service, Cmd, Args) ->
+run_cmd(Slave, Service, Cmd, Args) ->
     gen_server:call(Slave, {run_cmd, Service, Cmd, Args}).
 
-async_run_command(Slave, Service, Cmd, Args) ->
+async_run_cmd(Slave, Service, Cmd, Args) ->
     gen_server:cast(Slave, {run_cmd, Service, Cmd, Args}).
 
 stop(Slave) ->
@@ -66,8 +66,8 @@ handle_call({start_service, Service, Args}, _From, #state{services= Services} = 
     end;
 
 handle_call({run_cmd, Service, Cmd, Args}, _From, State) ->
-    apply(Service, Cmd, Args),
-    {reply, ok, State};
+    Result = apply(Service, Cmd, Args),
+    {reply, Result, State};
 
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.

@@ -7,9 +7,9 @@
 %% ------------------------------------------------------------------
 
 -export([start/1,
-         get_run_cmd_count/1,
-         run_cmd/2,
-         crash/1]).
+         get_echo_count/0,
+         echo/1,
+         crash/0]).
 
 %% ------------------------------------------------------------------
 %% gen_server Function Exports
@@ -23,17 +23,17 @@
 %% ------------------------------------------------------------------
 
 start(Args) ->
-    {ok, PID} = gen_server:start({local, ?SERVER}, ?MODULE, Args, []),
+    {ok, PID} = gen_server:start({local, ?SERVER}, ?MODULE, [Args], []),
     PID.
 
-get_run_cmd_count(Node) ->
-    gen_server:call({?SERVER, Node}, get_run_cmd_count).
+get_echo_count() ->
+    gen_server:call(?SERVER, get_echo_count).
 
-run_cmd(Node, Cmd) ->
-    gen_server:cast({?SERVER, Node}, {run_cmd, Cmd}).
+echo(Str) ->
+    gen_server:cast(?SERVER, {echo, Str}).
 
-crash(Node) ->
-    gen_server:cast({?SERVER, Node}, crash).
+crash() ->
+    gen_server:cast(?SERVER, crash).
 
 
 %% ------------------------------------------------------------------
@@ -44,14 +44,14 @@ init([Master]) ->
     Master ! {service_started, self()},
     {ok, #state{run_cmd_count = 0}}.
 
-handle_call(get_run_cmd_count, _From, #state{run_cmd_count = Count} = State) ->
+handle_call(get_echo_count, _From, #state{run_cmd_count = Count} = State) ->
     {reply, Count, State};
 
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
-handle_cast({run_cmd, Cmd}, #state{run_cmd_count = Count}) ->
-    io:format("run cmd ~p ~n", [Cmd]),
+handle_cast({echo, Str}, #state{run_cmd_count = Count}) ->
+    io:format("~p ~n", [Str]),
     {noreply, #state{run_cmd_count = Count + 1}};
 
 handle_cast(crash, State) ->
