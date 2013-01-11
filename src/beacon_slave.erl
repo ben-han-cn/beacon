@@ -3,6 +3,8 @@
 -define(SERVER, ?MODULE).
 -record(state, {master, services}).
 
+-define(SERVICE_MAP, [{ruby, beacon_port_dirver}]).
+
 %% ------------------------------------------------------------------
 %% API Function Exports
 %% ------------------------------------------------------------------
@@ -56,18 +58,29 @@ init([Master]) ->
     {ok, #state{master = Master, services = []}}.
 
 handle_call({start_service, Service, Args}, _From, #state{services= Services} = State) ->
-    spawn(Service, start, [self() | Args]),
-    receive
-        {service_started, ServicePID} ->
-            link(ServicePID),
-            {reply, ok, State#state{services = [{Service, ServicePID} | Services]}}
-    after 2000 ->
-            {reply, failed, State}
+    case lists:keysearch(Service, 1, ?SERVICE_MAP) of
+        {value, {Service, Module}} ->
+            spawn(Module, start, [[self() | Args]]),
+            receive
+                {service_started, ServicePID} ->
+                    link(ServicePID),
+                    {reply, ok, State#state{services = [{Service, Module, ServicePID} | Services]}}
+            after 2000 ->
+                    {reply, failed, State}
+            end;
+        false ->
+            {reply, {failed, "unknown service type"}, State}
     end;
 
-handle_call({run_cmd, Service, Cmd, Args}, _From, State) ->
-    Result = apply(Service, Cmd, Args),
-    {reply, Result, State};
+handle_call({run_cmd, Service, Cmd, Args}, _From, #state{services = Services} = State) ->
+    io:format("xxxxxxxx find in ~p for ~p ~n", [Services, Service]),
+    case lists:keysearch(Service, 1, Services) of
+        {value, {Service, Module, ServicePid}} ->
+            Result = apply(Module, Cmd, [ServicePid | Args]),
+            {reply, Result, State};
+        false ->
+            {reply, {failed, "unknown service"}, State}
+    end;
 
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.

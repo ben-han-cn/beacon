@@ -1,13 +1,13 @@
 -module(beacon_port_dirver).
 -behaviour(gen_server).
 -define(SERVER, ?MODULE).
--record(state, {server, port}).
+-record(state, {port}).
 
 %% ------------------------------------------------------------------
 %% API Function Exports
 %% ------------------------------------------------------------------
 
--export([start/2,
+-export([start/1,
          sync_run/2,
          async_run/2,
          stop/1]).
@@ -23,26 +23,27 @@
 %% API Function Definitions
 %% ------------------------------------------------------------------
 
-start(ServiceName, Script) ->
-    gen_server:start_link({local, ServiceName}, ?MODULE, [[ServiceName, Script]], []).
+start([Master, Script]) ->
+    gen_server:start(?MODULE, [Master, Script], []).
 
-sync_run(ServiceName, Cmd) ->
-    gen_server:call(ServiceName, {run_cmd, Cmd}). 
+sync_run(Pid, Cmd) ->
+    gen_server:call(Pid, {run_cmd, Cmd}). 
 
-async_run(ServiceName, Cmd) ->
-    gen_server:cast(ServiceName, {run_cmd, Cmd}). 
+async_run(Pid, Cmd) ->
+    gen_server:cast(Pid, {run_cmd, Cmd}). 
 
-stop(ServiceName) ->
-    gen_server:cast(ServiceName, stop).
+stop(Pid) ->
+    gen_server:cast(Pid, stop).
 %% ------------------------------------------------------------------
 %% gen_server Function Definitions
 %% ------------------------------------------------------------------
 
-init([ServiceName, Script]) ->
+init([Master, Script]) ->
     Port = open_port({spawn, Script}, [{packet, 2}]),
-    {ok, #state{server = ServiceName, port = Port}}.
+    Master ! {service_started, self()},
+    {ok, #state{port = Port}}.
 
-handle_call({run, Cmd}, _From, #state{port = Port} = State) ->
+handle_call({run_cmd, Cmd}, _From, #state{port = Port} = State) ->
     erlang:port_command(Port, Cmd),
     receive
         {Port, {data, Data}} ->
@@ -55,7 +56,7 @@ handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
 
-handle_cast({run, Cmd}, #state{port = Port} = State) ->
+handle_cast({run_cmd, Cmd}, #state{port = Port} = State) ->
     erlang:port_command(Port, Cmd),
     {noreply, State};
 
