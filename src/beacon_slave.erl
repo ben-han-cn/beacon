@@ -12,8 +12,8 @@
 -export([start/1,
          start_service/3,
          stop_service/2,
-         run_cmd/4,
-         async_run_cmd/4,
+         run_sync_cmd/4,
+         run_async_cmd/4,
          get_running_services/1,
          stop/1]).
 
@@ -40,11 +40,11 @@ stop_service(Slave, Service) ->
 get_running_services(Slave) ->
     gen_server:call(Slave, get_running_services).
 
-run_cmd(Slave, Service, Cmd, Args) ->
-    gen_server:call(Slave, {run_cmd, Service, Cmd, Args}).
+run_sync_cmd(Slave, Service, Cmd, Args) ->
+    gen_server:call(Slave, {run_sync_cmd, Service, Cmd, Args}).
 
-async_run_cmd(Slave, Service, Cmd, Args) ->
-    gen_server:cast(Slave, {run_cmd, Service, Cmd, Args}).
+run_async_cmd(Slave, Service, Cmd, Args) ->
+    gen_server:cast(Slave, {run_async_cmd, Service, Cmd, Args}).
 
 stop(Slave) ->
     gen_server:cast(Slave, stop).
@@ -72,8 +72,7 @@ handle_call({start_service, Service, Args}, _From, #state{services= Services} = 
             {reply, {failed, "unknown service type"}, State}
     end;
 
-handle_call({run_cmd, Service, Cmd, Args}, _From, #state{services = Services} = State) ->
-    io:format("xxxxxxxx find in ~p for ~p ~n", [Services, Service]),
+handle_call({run_sync_cmd, Service, Cmd, Args}, _From, #state{services = Services} = State) ->
     case lists:keysearch(Service, 1, Services) of
         {value, {Service, Module, ServicePid}} ->
             Result = apply(Module, Cmd, [ServicePid | Args]),
@@ -84,6 +83,15 @@ handle_call({run_cmd, Service, Cmd, Args}, _From, #state{services = Services} = 
 
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
+
+handle_cast({run_async_cmd, Service, Cmd, Args}, #state{services = Services} = State) ->
+    case lists:keysearch(Service, 1, Services) of
+        {value, {Service, Module, ServicePid}} ->
+            spawn(Module, Cmd, [ServicePid | Args]);
+        false ->
+            io:format("unknown service")
+    end,
+    {noreply, State};
 
 handle_cast(stop, State) ->
     {stop, normal, State};
@@ -103,4 +111,3 @@ code_change(_OldVsn, State, _Extra) ->
 %% ------------------------------------------------------------------
 %% Internal Function Definitions
 %% ------------------------------------------------------------------
-

@@ -2,6 +2,7 @@
 -behaviour(gen_server).
 -define(SERVER, ?MODULE).
 -record(state, {port}).
+-include("beacon.hrl").
 
 %% ------------------------------------------------------------------
 %% API Function Exports
@@ -48,7 +49,8 @@ handle_call({run_cmd, Cmd}, _From, #state{port = Port} = State) ->
     receive
         {Port, {data, Data}} ->
             {reply, {ok, Data}, State}
-    after 2000 ->
+    after
+        2000 ->
             {reply, {failed, timeout}, State}
     end;
 

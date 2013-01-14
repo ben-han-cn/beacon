@@ -1,16 +1,18 @@
 -module(beacon_slave_agent).
 -behaviour(gen_server).
 -define(SERVER, ?MODULE).
+-include("beacon.hrl").
 -record(state, {node_full_name, slave_pid, slave_state}).
 
 %% ------------------------------------------------------------------
 %% API Function Exports
 %% ------------------------------------------------------------------
 
--export([start/1,
+-export([start_link/1,
          start_service/3,
          stop_service/2,
-         run_cmd/4,
+         run_sync_cmd/4,
+         run_async_cmd/4,
          get_running_services/1,
          stop/1]).
 
@@ -25,8 +27,8 @@
 %% API Function Definitions
 %% ------------------------------------------------------------------
 
-start(Node) ->
-    gen_server:start(?MODULE, [Node], []).
+start_link(Node) ->
+    gen_server:start_link(?MODULE, [Node], []).
 
 start_service(Agent, Service, Args) ->
     gen_server:call(Agent, {start_service, Service, Args}).
@@ -34,8 +36,11 @@ start_service(Agent, Service, Args) ->
 stop_service(Agent, Service) ->
     gen_server:call(Agent, {stop_service, Service}).
 
-run_cmd(Agent, Service, Cmd, Args) ->
-    gen_server:call(Agent, {run_cmd, Service, Cmd, Args}).
+run_sync_cmd(Agent, Service, Cmd, Args) ->
+    gen_server:call(Agent, {run_sync_cmd, Service, Cmd, Args}).
+
+run_async_cmd(Agent, Service, Cmd, Args) ->
+    gen_server:cast(Agent, {run_async_cmd, Service, Cmd, Args}).
 
 get_running_services(Agent) ->
     gen_server:call(Agent, get_running_services).
@@ -63,8 +68,8 @@ init([Node]) ->
                 {slave_started, SlavePID} ->
                 erlang:monitor(process, SlavePID),
                 {ok, #state{node_full_name = Node, slave_pid = SlavePID, slave_state = running}} 
-            after 2000 ->
-                {stop, "connect node failed"}
+            after 
+                ?REMOTE_SLAVE_CREATE_TIMEOUT-> {stop, "connect node failed"}
             end;
         false ->
             {stop, "connect node failed"}
@@ -79,15 +84,24 @@ handle_call({start_service, Service, Args}, _From, #state{slave_pid = SlavePID, 
     end,
     {reply, ok, State};
 
-handle_call({run_cmd, Service, Cmd, Args}, _From, #state{slave_pid = SlavePID, slave_state = SlaveStatus} = State) ->
+handle_call({run_sync_cmd, Service, Cmd, Args}, _From, #state{slave_pid = SlavePID, slave_state = SlaveStatus} = State) ->
     Result = case SlaveStatus of
                 running ->
-                    beacon_slave:run_cmd(SlavePID, Service, Cmd, Args);
+                    beacon_slave:run_sync_cmd(SlavePID, Service, Cmd, Args);
                 _ ->
                     io:format("slave node isn't running"),
                     'cmd is buffered'
             end,
     {reply, Result, State}.
+
+handle_cast({run_async_cmd, Service, Cmd, Args}, #state{slave_pid = SlavePID, slave_state = SlaveStatus} = State) ->
+    case SlaveStatus of
+        running ->
+            beacon_slave:run_async_cmd(SlavePID, Service, Cmd, Args);
+        _ ->
+            io:format("slave node isn't running")
+    end,
+    {noreply, State};
 
 handle_cast(_Msg, State) ->
     {noreply, State}.

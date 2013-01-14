@@ -9,10 +9,9 @@
 
 test() ->
     application:start(beacon),
-    beacon_master:add_node(nana, "127.0.0.1"),
-    Node = beacon_master:get_node(nana),
+    {ok, Node} = beacon_master:add_node(nana, "127.0.0.1"),
     beacon_slave_agent:start_service(Node, ruby, ["ruby /Users/hanfeng/workspace/code/erlang/beacon/src/test_port.rb"]),
-    Ret = beacon_slave_agent:run_cmd(Node, ruby, sync_run, ["fucking good"]),
-    io:format("xxxxxxx ret 1 ~p ~n", [Ret]),
-    Ret2 = beacon_slave_agent:run_cmd(Node, ruby, sync_run, ["exit"]),
-    io:format("xxxxxxx ret 1 ~p ~n", [Ret2]).
+    lists:foreach(fun(I) ->
+                beacon_slave_agent:run_sync_cmd(Node, ruby, sync_run, ["a" ++ integer_to_list(I)])
+        end, lists:seq(1, 2000)),
+    beacon_slave_agent:run_async_cmd(Node, ruby, sync_run, ["exit"]).

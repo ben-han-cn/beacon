@@ -48,54 +48,41 @@ get_offline_nodes() ->
 %% ------------------------------------------------------------------
 %% gen_server Function Definitions
 %% ------------------------------------------------------------------
-
-node_full_name(Node, IP) ->
-    list_to_atom(atom_to_list(Node) ++ "@" ++ IP).
-
 init([]) ->
     process_flag(trap_exit, true),
     {ok, #state{online_nodes=[], offline_nodes=[]}}.
 
 handle_call({add_node, Node, IP}, _From, #state{online_nodes = OnlineNodes} = State) ->
     NodeFullName= node_full_name(Node, IP),
-    case beacon_slave_agent:start(NodeFullName) of
+    case beacon_slave_agent:start_link(NodeFullName) of
         {ok, PID} ->
-            {reply, ok, State#state{online_nodes = [{Node, PID} | OnlineNodes]}};
+            {reply, {ok, PID}, State#state{online_nodes = [{Node, PID} | OnlineNodes]}};
         {error, Info} ->
-            io:format("node ~p add failed : ~p ~n", [Node, Info]),
-            {reply, failed, State}
+            ErrorInfo = io_lib:format("node ~p add failed : ~p ~n", [Node, Info]),
+            {reply, {failed, ErrorInfo}, State}
     end;
 
 handle_call({get_node, Node}, _From, #state{online_nodes = OnlineNodes} = State) ->
     case lists:keysearch(Node, 1, OnlineNodes) of 
         {value, {Node, AgentPID}} ->
-            {reply, AgentPID, State};
+            {reply, {ok, AgentPID}, State};
         false ->
-            {reply, undefined, State}
+            {reply, {failed, undefined}, State}
     end;
 
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
-handle_info({nodedown, FullNode}, #state{online_nodes = OnlineNodes, offline_nodes = OfflineNodes} = State) ->
-    NewState = case lists:keytake(FullNode, 2, OnlineNodes) of
-                    {value, {Node, FullNode, _}, NewOnlineNodes} -> 
-                        #state{online_nodes = NewOnlineNodes, offline_nodes = [{Node, FullNode} | OfflineNodes]};
-                    false ->
-                        State
-                end,
-    {noreply, NewState};
-
-handle_info({'EXIT',Pid, Info}, #state{online_nodes = _OnlineNodes} = State) ->
-    io:format("xxxxxxget exit from ~p ~p ~n", [Pid, Info]),
-    %%NewState = case lists:keytake(Pid, 3, OnlineNodes) of
-    %%                {value, {Node, FullNode, _}, NewOnlineNodes} -> 
-    %%                    NewPid = spawn_link(FullNode, beacon_echo, start, []),
-    %%                    State#state{online_nodes = [{Node, FullNode, NewPid} | NewOnlineNodes]};
-    %%                false ->
-    %%                    State
-    %%            end,
-    {noreply, State};
+handle_info({'EXIT',Pid, Info}, #state{online_nodes = OnlineNodes} = State) ->
+    NewOnlineNodes = case lists:keytake(Pid, 2, OnlineNodes) of
+                        {value, {Node, Pid}, LeftOnlineNodes} -> 
+                            io:format("node ~p agent crashed ~p ~n", [Node, Info]),
+                            LeftOnlineNodes;
+                        _ -> 
+                            io:format("warning receive unknow process : ~p  exit info", [Pid]),
+                            OnlineNodes
+                     end,
+    {noreply, State#state{online_nodes = NewOnlineNodes}};
 
 handle_info(_Info, State) ->
     {noreply, State}.
@@ -112,4 +99,5 @@ code_change(_OldVsn, State, _Extra) ->
 %% ------------------------------------------------------------------
 %% Internal Function Definitions
 %% ------------------------------------------------------------------
-
+node_full_name(Node, IP) ->
+    list_to_atom(atom_to_list(Node) ++ "@" ++ IP).
