@@ -55,7 +55,7 @@ init([Node]) ->
                 {ok, #state{node_full_name = Node, 
                             slave_pid = SlavePID, 
                             slave_state = running,
-                            cmd_queue = beacon_cmd_queue:start_link(Node, (atom_to_list(Node) ++ "cmd_queue"))}} 
+                            cmd_queue = beacon_cmd_queue:start_link(Node, (atom_to_list(Node) ++ ".cmd_queue"))}} 
             after 
                 ?REMOTE_SLAVE_CREATE_TIMEOUT-> {stop, "connect node failed"}
             end;
@@ -66,7 +66,7 @@ init([Node]) ->
 handle_call({run_sync_cmd, CmdJson}, _From, #state{slave_pid = SlavePID, slave_state = SlaveStatus} = State) ->
     Result = case SlaveStatus of
                 running ->
-                    beacon_slave:run_sync_cmd(SlavePID, beacon_command:parse_cmd(CmdJson));
+                    beacon_slave:run_sync_cmd(SlavePID, beacon_command:from_json(CmdJson));
                 _ ->
                     io:format("slave node isn't running"),
                     'cmd is buffered'
@@ -90,7 +90,7 @@ handle_call({run_critical_cmd, CmdJson}, _From, #state{slave_pid = SlavePID, sla
 handle_cast({run_async_cmd, CmdJson}, #state{slave_pid = SlavePID, slave_state = SlaveStatus} = State) ->
     case SlaveStatus of
         running ->
-            beacon_slave:run_async_cmd(SlavePID, beacon_command:parse_cmd(CmdJson));
+            beacon_slave:run_async_cmd(SlavePID, beacon_command:from_json(CmdJson));
         _ ->
             io:format("slave node isn't running")
     end,
@@ -140,6 +140,7 @@ link_node(Node) ->
 
 syncronize_cmd_queue(State) ->
     #state{slave_pid = SlavePid, cmd_queue = MasterQueue} = State,
+    io:format("slave ~p is online again, start to sync command ~n", [SlavePid]),
     SlaveLastCmdID = beacon_slave:get_last_cmd_id(SlavePid),
     beacon_cmd_queue:dequeue_to_cmd(MasterQueue, SlaveLastCmdID),
     Commands = beacon_cmd_queue:to_list(MasterQueue),
@@ -151,5 +152,3 @@ send_buffered_cmds([], _) ->
 send_buffered_cmds([Cmd | Rest], SlavePID) ->
     beacon_slave:run_critical_cmd(SlavePID, Cmd),
     send_buffered_cmds(Rest, SlavePID).
-
-    

@@ -83,12 +83,14 @@ init([QueueName, FilePath]) ->
 
 handle_call({enqueue, Cmd}, _From, #state{cmd_table = Table, max_id = MaxID} = State) ->
     CmdRecord = case is_record(Cmd, beacon_cmd) of
-                    true -> Cmd;
-                    false -> beacon_command:parse_cmd(Cmd, MaxID)
+                    true -> 
+                        MaxID = Cmd#beacon_cmd.id, %make sure insert valid id
+                        Cmd;
+                    false -> beacon_command:from_json(Cmd, MaxID)
                 end,
     io:format("!!!! insert cmd ~p ~n", [CmdRecord]),
     ok = dets:insert(Table, CmdRecord),
-    {reply, CmdRecord, State#state{max_id = CmdRecord#beacon_cmd.id + 1}};
+    {reply, CmdRecord, State#state{max_id = MaxID + 1}};
 
 handle_call(dequeue, _From, #state{cmd_table = Table, min_id = MinID} = State) ->
     [Cmd] = dets:lookup(Table, MinID),

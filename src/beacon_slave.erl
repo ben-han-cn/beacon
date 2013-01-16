@@ -53,7 +53,7 @@ init([Master]) ->
     Master ! {slave_started, self()},
     {ok, #state{master = Master, 
                 services = [], 
-                cmd_queue = beacon_cmd_queue:start_link(slave, "./slave_cmd_queue")}}. 
+                cmd_queue = beacon_cmd_queue:start_link(slave, "./slave.cmd_queue")}}. 
 
 handle_call({run_sync_cmd, Cmd}, _From, #state{services = Services} = State) ->
     Service = list_to_atom(beacon_command:get_service(Cmd)),
@@ -71,7 +71,6 @@ handle_call({run_critical_cmd, Cmd}, _From, #state{services = Services, cmd_queu
     case beacon_command:is_start_new_service(Cmd) of 
             true -> start_service(Service, Cmd, State);
             false -> 
-                io:format("!!!!! service is ~p, services is ~p ~n", [Service, Services]),
                 {value, {Service, Module, ServicePid}} = lists:keysearch(Service, 1, Services),
                 Result = apply(Module, sync_run, [ServicePid, Cmd]),
                 {reply, Result, State}
@@ -119,7 +118,6 @@ code_change(_OldVsn, State, _Extra) ->
 %% ------------------------------------------------------------------
 start_service(Service, Cmd, #state{services= Services} = State) ->
     {value, {Service, Module}} = lists:keysearch(Service, 1, ?SERVICE_MAP),
-    io:format("+++++++++ module is ~p : ~p ~n", [Module, [self() | Cmd#beacon_cmd.args]]),
     spawn(Module, start, [[self() | Cmd#beacon_cmd.args]]),
     receive
         {service_started, ServicePID} ->
@@ -129,4 +127,3 @@ start_service(Service, Cmd, #state{services= Services} = State) ->
             io:format("!!!!!!! start sevices failed ~n"),
             {reply, failed, State}
     end.
-

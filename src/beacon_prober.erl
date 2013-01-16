@@ -39,6 +39,7 @@ stop(Pid) ->
 %% ------------------------------------------------------------------
 
 init([Master, Target, Frequency]) ->
+    io:format("start to probe ~p ~n", [Target]),
     erlang:send_after(Frequency, self(), proble),
     {ok, #state{master = Master, target = Target, frequency = Frequency}}.
 

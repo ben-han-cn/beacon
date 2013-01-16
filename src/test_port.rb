@@ -5,11 +5,10 @@ while true
     begin 
         len_data = STDIN.read(2)
         byte_count = len_data.unpack("n")[0]
-        output << byte_count << "\n"
+        output << "cmd_data_len: " << byte_count << "\n"
         line = STDIN.read(byte_count)
         cmd = JSON.load(line)
         output << "command_name: " << cmd["name"] << "\n"
-        output << "command_id: " << cmd["id"] << "\n"
         output << "command_args: " << cmd["args"] << "\n"
         output << "\n\n"
         STDOUT.write_nonblock(len_data)
