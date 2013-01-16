@@ -8,6 +8,7 @@
 -export([decoder/1, decode/1]).
 -export([binary_encoder/1, binary_encode/1]).
 -export([binary_decoder/1, binary_decode/1]).
+-export([test/0]).
 
 % This is a macro to placate syntax highlighters..
 -define(Q, $\").
@@ -15,6 +16,8 @@
 -define(INC_COL(S), S#decoder{column=1+S#decoder.column}).
 -define(INC_LINE(S), S#decoder{column=1, line=1+S#decoder.line}).
 
+%% @type iolist() = [char() | binary() | iolist()]
+%% @type iodata() = iolist() | binary()
 %% @type json_string() = atom | string() | binary()
 %% @type json_number() = integer() | float()
 %% @type json_array() = {array, [json_term()]}
@@ -87,6 +90,10 @@ binary_encode(Any) ->
 %%      binaries for strings.
 binary_decode(S) ->
     mochijson2:decode(S).
+
+test() ->
+    test_all(),
+    mochijson2:test().
 
 %% Internal API
 
@@ -400,13 +407,6 @@ tokenize(L=[C | _], S) when C >= $0, C =< $9; C == $- ->
             {{const, list_to_float(Float)}, Rest, S1}
     end.
 
-
-%%
-%% Tests
-%%
--ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
-
 %% testing constructs borrowed from the Yaws JSON implementation.
 
 %% Create an object from a list of Key/Value pairs.
@@ -462,10 +462,11 @@ equiv_list([], []) ->
 equiv_list([V1 | L1], [V2 | L2]) ->
     equiv(V1, V2) andalso equiv_list(L1, L2).
 
-e2j_vec_test() ->
+test_all() ->
+    test_issue33(),
     test_one(e2j_test_vec(utf8), 1).
 
-issue33_test() ->
+test_issue33() ->
     %% http://code.google.com/p/mochiweb/issues/detail?id=33
     Js = {struct, [{"key", [194, 163]}]},
     Encoder = encoder([{input_encoding, utf8}]),
@@ -525,5 +526,3 @@ e2j_test_vec(utf8) ->
     {{array, [-123, "foo", obj_from_list([{"bar", {array, []}}]), null]},
      "[-123,\"foo\",{\"bar\":[]},null]"}
     ].
-
--endif.

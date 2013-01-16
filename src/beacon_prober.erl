@@ -1,16 +1,18 @@
--module(beacon_port_dirver).
+-module(beacon_prober).
 -behaviour(gen_server).
 -define(SERVER, ?MODULE).
--record(state, {port}).
--include("beacon.hrl").
+-define(PROBE_FREQUENCY, 5000).
+-define(PROBE_TIMEOUT, 3000).
+-record(state, {master,
+                target,
+                frequency}).
 
 %% ------------------------------------------------------------------
 %% API Function Exports
 %% ------------------------------------------------------------------
 
--export([start/1,
-         sync_run/2,
-         async_run/2,
+-export([start_link/2,
+         start_link/3,
          stop/1]).
 
 %% ------------------------------------------------------------------
@@ -24,52 +26,43 @@
 %% API Function Definitions
 %% ------------------------------------------------------------------
 
-start([Master | Args]) ->
-    gen_server:start(?MODULE, [Master, Args], []).
-
-sync_run(Pid, Cmd) ->
-    gen_server:call(Pid, {run_cmd, Cmd}). 
-
-async_run(Pid, Cmd) ->
-    gen_server:cast(Pid, {run_cmd, Cmd}). 
+start_link(Master, Target) ->
+    start_link(Master, Target, ?PROBE_FREQUENCY).
+start_link(Master, Target, Frequency) ->
+    gen_server:start_link(?MODULE, [Master, Target, Frequency], []).
 
 stop(Pid) ->
     gen_server:cast(Pid, stop).
+
 %% ------------------------------------------------------------------
 %% gen_server Function Definitions
 %% ------------------------------------------------------------------
 
-init([Master, Args]) ->
-    {value, {"shell", Shell}} = lists:keysearch("shell", 1, Args),
-    io:format("++++++++++++++ shell is ~p ~n", [Shell]),
-    Port = open_port({spawn, Shell}, [{packet, 2}]),
-    Master ! {service_started, self()},
-    {ok, #state{port = Port}}.
-
-handle_call({run_cmd, Cmd}, _From, #state{port = Port} = State) ->
-    erlang:port_command(Port, beacon_command:to_json(Cmd)),
-    receive
-        {Port, {data, Data}} ->
-            {reply, {ok, Data}, State}
-    after
-        2000 ->
-            {reply, {failed, timeout}, State}
-    end;
+init([Master, Target, Frequency]) ->
+    erlang:send_after(Frequency, self(), proble),
+    {ok, #state{master = Master, target = Target, frequency = Frequency}}.
 
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
-
-handle_cast({run_cmd, Cmd}, #state{port = Port} = State) ->
-    erlang:port_command(Port, Cmd),
-    {noreply, State};
-
-handle_cast(stop, #state{port = Port} = State) ->
-    erlang:port_close(Port),
-    {reply, ok, State};
+handle_cast(stop, State) ->
+    {stop, normal, State};
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
+
+handle_info(proble, State) ->
+    #state{target = Target, master = Master, frequency = Frequency} = State,
+    Target ! {probe, self()},
+    receive
+        {ok, Target} -> 
+            Master ! {probe_succeed, Target},
+            {stop, normal, State}
+    after
+        ?PROBE_TIMEOUT ->
+            erlang:send_after(Frequency, self(), proble),
+            {noreply, State}
+    end;
 
 handle_info(_Info, State) ->
     {noreply, State}.
