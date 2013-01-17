@@ -68,8 +68,7 @@ handle_call({run_sync_cmd, CmdJson}, _From, #state{slave_pid = SlavePID, slave_s
                 running ->
                     beacon_slave:run_sync_cmd(SlavePID, beacon_command:from_json(CmdJson));
                 _ ->
-                    io:format("slave node isn't running"),
-                    'cmd is buffered'
+                    {failed, "node is offline"}
             end,
     {reply, Result, State};
 
@@ -79,11 +78,10 @@ handle_call({run_critical_cmd, CmdJson}, _From, #state{slave_pid = SlavePID, sla
                     Cmd = beacon_cmd_queue:enqueue(Queue, CmdJson),
                     Ret = beacon_slave:run_critical_cmd(SlavePID, Cmd),
                     beacon_cmd_queue:dequeue(Queue),
-                    Ret;
+                    {ok, Ret};
                 _ ->
-                    io:format("slave node isn't running"),
                     beacon_cmd_queue:enqueue(Queue, CmdJson),
-                    "cmd buffered"
+                    {ok, "slave node is offline, cmd will be buffered"}
             end,
     {reply, Result, State}.
 
@@ -92,7 +90,7 @@ handle_cast({run_async_cmd, CmdJson}, #state{slave_pid = SlavePID, slave_state =
         running ->
             beacon_slave:run_async_cmd(SlavePID, beacon_command:from_json(CmdJson));
         _ ->
-            io:format("slave node isn't running")
+            io:format("warning!   node is offline")
     end,
     {noreply, State};
 

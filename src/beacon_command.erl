@@ -18,13 +18,13 @@ from_json(CmdStr) ->
     from_json(CmdStr, -1).
 
 from_json(CmdJson, AssignID) ->
-    {struct, [{"name", Name}, {"args", {array, Args}}]} = mochijson:decode(CmdJson),
-    create(AssignID, list_to_atom(Name), decode_args(Args)).
+    {struct, [{"name", Name}, {"args", {struct, Args}}]} = mochijson:decode(CmdJson),
+    create(AssignID, list_to_atom(Name), Args).
 
 to_json(Cmd) ->
     #beacon_cmd{name = Name, args = Args} = Cmd,
     mochijson:encode({struct, [{"name", Name}, 
-                               {"args", {array, encode_args(Args)}}]}).
+                               {"args", {struct, Args}}]}).
 create(ID, Name, Args) ->
     #beacon_cmd{id = ID,
                 name = Name,
@@ -41,14 +41,3 @@ is_start_new_service(Cmd) ->
 %% ------------------------------------------------------------------
 %% Internal Function Definitions
 %% ------------------------------------------------------------------
-
-%%
-%% args => {"args",
-%%             {array,[{struct,[{"zone_name","www.1.com"}]},
-%%                     {struct,[{"rr","1.1.1.1"}]}]}}]}
-%%
-decode_args(Args) ->
-    lists:map(fun(ArgJsonStruct)-> {struct, [Arg]} = ArgJsonStruct, Arg end, Args).
-
-encode_args(Args) ->
-    lists:map(fun(ArgJson) -> {struct, [ArgJson]} end, Args).
